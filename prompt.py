@@ -58,6 +58,9 @@ No explanations, no markdown, no extra keys.
     ("user", """Diagnoses list:
 {diagnoses}
 
+Active History:
+{active_history}
+
 Analyze the CURRENT text. If the patient is stable/improving/no acute symptoms, return {{"keywords": []}}. Otherwise, extract MAX 2 severe symptom phrases. Return JSON only.""")
 ])
 # 2. Initial Prescription Generator: Drafts a baseline prescription based on diagnoses and history.
