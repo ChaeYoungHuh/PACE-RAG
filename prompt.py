@@ -185,9 +185,7 @@ For EVERY Draft drug class you process in Step 2, you MUST create exactly one `a
 **FINAL EXECUTION TASK:**
 Apply the 2-STEP DRUG CLASS FILTERING ALGORITHM.
 1. Force-copy ALL Active History classes to `final_prescription` and log them as "KEPT" (unless history is empty).
-2. Evaluate remaining Draft classes strictly against RAG `common_additions`, adopting the specific RAG terminology.
-
-Output ONLY the strict JSON dictionary."""
+2. Evaluate remaining Draft classes strictly against RAG `common_additions`, adopting the specific RAG terminology."""
     )
 ])
 
