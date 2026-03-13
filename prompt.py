@@ -33,8 +33,6 @@ def _invoke_chain_with_full_input_log(prompt, llm, invoke_dict):
     return chain.invoke(invoke_dict)
 
 # --- MIMIC-IV Enhanced RAG Prompts ---
-
-# 1. Focus Keyword Extractor: Extracts key clinical focus areas for targeted RAG retrieval.
 LLM_focus_keyword_extractor_prompt_MIMIC = ChatPromptTemplate.from_messages([
     ("system", """You are a precise Medical Diagnosis Extractor for MIMIC-IV inpatients. Your ONLY job is to identify CURRENT ACTIVE diagnoses that are NEW, WORSENING, or UNRESOLVED and clearly matter for treatment.
 You are NOT a doctor. Do NOT invent, infer, or hallucinate.
@@ -47,11 +45,11 @@ You are NOT a doctor. Do NOT invent, infer, or hallucinate.
 2. **NO GENERIC LABELS OR FRAGMENTS:**
    - Do NOT output encounter/status/meta phrases alone (e.g., "Inpatient", "Hospitalization", "Follow-up visit").
    - Forbidden single bare words: "acute", "chronic", "failure", "infection" by themselves.
-3. **KEEP FULL DIAGNOSIS PHRASES (LITERAL MATCH):**
+3. **LITERAL MATCH:**
    - Always keep full diagnosis phrases exactly as written (e.g., "Acute kidney failure", "Sepsis due to pneumonia").
    - Do NOT chop off qualifiers like "acute", "chronic", "unspecified".
    - Every keyword must be an exact substring from the diagnoses text (case-insensitive). No paraphrasing or rewording.
-4. **LIMIT:** Max 5 phrases. Focus ONLY on acute/active issues that drive treatment decisions.
+4. **LIMIT:** Max 2 phrases. Focus ONLY on the most critical acute/active issues that drive treatment decisions.
 
 **OUTPUT FORMAT (JSON ONLY):**
 {{"keywords": ["Diagnosis phrase 1", "Diagnosis phrase 2"]}}  OR  {{"keywords": []}}
@@ -60,7 +58,7 @@ No explanations, no markdown, no extra keys.
     ("user", """Diagnoses list:
 {diagnoses}
 
-Analyze the CURRENT text. If the patient is stable/improving/no acute symptoms, return {{"keywords": []}}. Otherwise, extract MAX 5 severe symptom phrases. Return JSON only.""")
+Analyze the CURRENT text. If the patient is stable/improving/no acute symptoms, return {{"keywords": []}}. Otherwise, extract MAX 2 severe symptom phrases. Return JSON only.""")
 ])
 # 2. Initial Prescription Generator: Drafts a baseline prescription based on diagnoses and history.
 LLM_simple_prescription_with_reason_prompt_MIMIC = ChatPromptTemplate.from_messages([
@@ -99,14 +97,14 @@ Past Clinical Visits (up to 3 visits before current):
 ])
 
 # 3. RAG tendency analyzer + Delta verifier
-LLM_rag_tendency_analyzer_MIMIC = ChatPromptTemplate.from_messages([
+LLM_rag_tendency_analyzer_MIMIC  = ChatPromptTemplate.from_messages([
     ("system", """You are a highly focused Clinical Pattern Analyzer for complex hospital inpatients (MIMIC-IV).
 
 **OBJECTIVE:** Analyze similar patient cases to identify EXACTLY which medication CLASSES physicians *NEWLY PRESCRIBED (ADDED)* to resolve the specific target diagnosis.
 
 **STRICT ANALYSIS RULES:**
 1. **FOCUS ONLY ON ADDITIONS:** Your ONLY job is to find drug classes that were *newly prescribed* (added) in the similar cases to treat the specific Target Clinical Focus.
-2. **CAUSALITY CHECK (CRITICAL):** The drug class MUST have been added specifically for the Target Diagnosis. (Note: General inpatient care classes like 'Heparin group' or 'laxatives' that consistently accompany the diagnosis should also be extracted).
+2. **CAUSALITY CHECK (CRITICAL):** The drug class MUST have been added specifically for the Target Diagnosis. (Note: General inpatient care classes like 'Heparin group' or 'laxatives' that consistently accompany the diagnosis across many similar cases as standard co-management or prophylaxis should also be extracted.)
 3. **IGNORE MAINTAINED DRUGS:** Do not extract drug classes that the patient was already taking.
 4. **CAUTIOUS EMPTY DEFAULT:** If the cases do not explicitly show a new drug class being added to treat the target diagnosis, your `common_additions` MUST be empty `[]`.
 5. **No Invention:** Rely ONLY on the provided text and copy exact pharmacological class names.
@@ -133,20 +131,24 @@ You MUST execute your task mechanically using this exact 2-step algorithm. Do no
 Look at the `Active History` list provided in the prompt.
 - If `Active History` is empty or "None", you MUST NOT use the "KEPT" action. Skip to Step 2.
 - Otherwise, you MUST put EVERY single drug class from `Active History` into your `final_prescription` array.
-- You MUST create an {{"action": "KEPT", "drug": "..."}} entry in the `audit_log` for EACH of these classes.
+- You MUST create an {{"action": "KEPT", "drug": "..."}} entry in the `audit_log` for EACH of these classes. 
 - NEVER miss or drop a class from the Active History.
 
 **STEP 2: EVALUATE DRAFT DRUG CLASSES**
 Look at the `Initial Draft Prescription`. For each drug class that is NOT already in Active History:
-- Does it conceptually match or exactly align with a specific pharmacological class in the RAG `common_additions` array? (Note: Draft may use broad terms like "Antidepressants", while RAG uses exact ATC classes like "Selective serotonin reuptake inhibitors").
-  -> YES: ADD the exact RAG class name. (action: "ADDED")
-  -> NO: REMOVE it. (action: "REMOVED")
+- Is this exact class name present in ANY focus's RAG `common_additions` array?
+  -> YES: ADD it to `final_prescription`. (action: "ADDED")
+  -> NO: REMOVE it from the Draft. (action: "REMOVED")
+
+For EVERY Draft drug class you process in Step 2, you MUST create exactly one `audit_log` entry ("ADDED" or "REMOVED"). If the Initial Draft is non-empty, `audit_log` MUST NOT be empty.
 
 =====================================================================
 ### CRITICAL RULES
-- STRICT ADD GATE: You can ONLY add a new drug class if it is explicitly listed in `common_additions`. Being in `maintained_drug` does NOT justify adding a new class.
-- SYNC RULE: If you log "REMOVED", it MUST NOT be in `final_prescription`.
-- EMPTY FALLBACK: If `final_prescription` is completely empty, pick 1 or 2 drug classes from RAG's `common_additions` and ADD them.
+- STRICT ONTOLOGY: NEVER output broad/umbrella categories (e.g., "Antihypertensives", "Analgesics", "Anticoagulants"). ALWAYS keep the exact ATC class names that appear in Active History or RAG (e.g., "Heparin group", "Anilides").
+- STRICT ADD GATE: You can ONLY add a new drug class if it is **literally present** (exact string match) in RAG `common_additions` for at least one focus. Being in `maintained_drug` or "clinically reasonable" is NOT enough.
+- SYNC RULE: If you log "REMOVED" for a class, that class MUST NOT appear anywhere in `final_prescription`. If a class remains in `final_prescription`, it MUST have action "KEPT" or "ADDED" in `audit_log`.
+- COVERAGE RULE: When the Initial Draft is non-empty, every Draft class that is not in Active History MUST appear exactly once in `audit_log` as either "ADDED" or "REMOVED".
+- EMPTY FALLBACK: If Active History is empty AND you removed all Draft classes AND at least one RAG `common_additions` class exists, you may ADD some clearly relevant class from RAG.
 
 =====================================================================
 ### REQUIRED JSON FORMAT (DO NOT ADD OTHER KEYS)
@@ -154,8 +156,8 @@ Look at the `Initial Draft Prescription`. For each drug class that is NOT alread
   "final_prescription": ["Drug Class A", "Drug Class B"],
   "audit_log": [
     {{"action": "KEPT", "drug": "Drug Class A", "reason": "Patient is already taking it in active history."}},
-    {{"action": "ADDED", "drug": "Drug Class B", "reason": "From RAG common_additions."}},
-    {{"action": "REMOVED", "drug": "Drug Class C", "reason": "Not in RAG common_additions."}}
+    {{"action": "ADDED", "drug": "Drug Class B", "reason": "Exactly listed in RAG common_additions for current focus."}},
+    {{"action": "REMOVED", "drug": "Drug Class C", "reason": "Not present in any RAG common_additions focus."}}
   ],
   "final_description": "Brief 1-sentence summary."
 }}

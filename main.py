@@ -226,9 +226,11 @@ def main():
         rag_patients = []
         similar_docs_map = {}
         query_level_hits = []
-        # Always include full diagnosis string query.
-        # If keyword extraction fails, this still performs retrieval deterministically.
-        search_queries = [", ".join(diagnoses)] + [q for q in focus_queries if q]
+
+        if focus_queries:
+            search_queries = [q for q in focus_queries if q]
+        else:
+            search_queries = [", ".join(diagnoses)]
         for q in search_queries:
             hits = vs.similarity_search_with_relevance_scores(q, k=args.retrieve_patients)
             query_hits = []
@@ -269,20 +271,6 @@ def main():
 
         # 4. RAG tendency by focus (only when RAG evidence exists)
         rag_tendency_by_focus = []
-
-        # Global tendency over all retrieved similar patients
-        if rag_patients:
-            overall_tendency = call_LLM_rag_tendency_analyzer_MIMIC(
-                rag_patients=rag_patients,
-                diagnoses=diagnoses,
-                llm=llm,
-            )
-            rag_tendency_by_focus.append({
-                "focus": "diagnoses_all",
-                "source": "full_diagnoses",
-                "num_cases": len(rag_patients),
-                "tendency": overall_tendency,
-            })
 
         # Per-focus tendency only when that focus produced RAG hits
         query_to_hits = {item.get("query"): item.get("hits", []) for item in query_level_hits}
