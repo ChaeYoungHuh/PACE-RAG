@@ -78,7 +78,7 @@ You should put one drug class name at every line!
 FORMAT STRICT: Output ONLY the [START]...[END] block. No extra text.
 
 STABILITY RULE (no most recent medications list):
-- If the clinical picture is stable/improved/no major new problems, output ONLY a conservative minimal set of classes.
+- If the clinical picture is stable/improved/no major new problems, output only a conservative minimal set of classes.
 - Prefer continuing existing chronic medication classes when they are clearly indicated.
 - Avoid starting broad new classes unless there is clear diagnostic support.
 **OUTPUT:**
