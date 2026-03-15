@@ -148,7 +148,7 @@ For EVERY Draft drug class you process in Step 2, you MUST create exactly one `a
 =====================================================================
 ### CRITICAL RULES
 - STRICT ONTOLOGY: NEVER output broad/umbrella categories (e.g., "Antihypertensives", "Analgesics", "Anticoagulants"). ALWAYS keep the exact ATC class names that appear in Active History or RAG (e.g., "Heparin group", "Anilides").
-- STRICT ADD GATE: You can ONLY add a new drug class if it is **literally present** (exact string match) in RAG `common_additions` for at least one focus. Being in `maintained_drug` or "clinically reasonable" is NOT enough.
+- STRICT ADD GATE: You can ONLY add a new drug class if it is **literally present** (exact string match) in RAG `common_additions` for at least one focus. 
 - SYNC RULE: If you log "REMOVED" for a class, that class MUST NOT appear anywhere in `final_prescription`. If a class remains in `final_prescription`, it MUST have action "KEPT" or "ADDED" in `audit_log`.
 - COVERAGE RULE: When the Initial Draft is non-empty, every Draft class that is not in Active History MUST appear exactly once in `audit_log` as either "ADDED" or "REMOVED".
 - EMPTY FALLBACK: If Active History is empty AND you removed all Draft classes AND at least one RAG `common_additions` class exists, you may ADD some clearly relevant class from RAG.
