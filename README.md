@@ -1,5 +1,5 @@
 # PACE-RAG: Patient-Aware Contextual & Evidence-based Policy RAG for Clinical Drug Recommendation
-
+[arxiv](https://arxiv.org/abs/2603.17356)
 PACE-RAG is a framework designed to predict and verify personalized medication plans for complex hospital inpatients using Retrieval-Augmented Generation. This repository provides the complete pipeline to process raw MIMIC-IV data, build a vector database of patient cases, and execute the PACE-RAG inference pipeline.
 
 ## Prerequisites
